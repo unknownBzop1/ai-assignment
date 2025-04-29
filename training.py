@@ -1,3 +1,5 @@
+import datetime
+from typing import TextIO
 import os
 import pandas as pd
 from PIL import Image
@@ -32,7 +34,7 @@ class ChestXrayDataset(Dataset):
         row = self.data.iloc[idx]
         img_path = os.path.join(self.image_dir, row['Image Index'])
         image = Image.open(img_path).convert("L")
-        label = torch.tensor(row['Finding Labels'].map({'No Finding': 0, 'Pneumothorax': 1}), dtype=torch.int32)
+        label = torch.tensor({'No Finding': 0.0, 'Pneumothorax': 1.0}[row['Finding Labels']], dtype=torch.float32)
         if self.transform:
             image = self.transform(image)
         return image, label
@@ -64,8 +66,12 @@ def evaluate(model, loader):
             total += labels.size(0)
     return 100 * correct / total
 
+def verbosely_write(file: TextIO, text: str, end='\n'):
+    file.write(text + end)
+    print(text, end=end)
+
 # 4. Main 함수
-def main():
+def main(file: TextIO):
     parser = argparse.ArgumentParser(description="Train ResNet18 on NIH Chest X-ray for Pneumothorax detection")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for training and validation")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
@@ -76,13 +82,13 @@ def main():
     epochs = args.epochs
     learning_rate = args.lr
 
-    print(f"Batch size: {batch_size}, Epochs: {epochs}, Learning Rate: {learning_rate}")
+    verbosely_write(file, f"Batch size: {batch_size}, Epochs: {epochs}, Learning Rate: {learning_rate}")
 
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406],
-                             [0.229, 0.224, 0.225])
+        transforms.Normalize([0.4883138293638019],
+                             [0.2357780462105494])
     ])
 
     train_dataset = ChestXrayDataset(train_df, "./images", transform)
@@ -92,7 +98,8 @@ def main():
 
     model = models.resnet18(pretrained=True)
     model.conv1.in_channels = 1
-    model.conv1.weight.data = model.state_dict()['conv1.weight'].mean(dim=1, keepdim=True)  # fits grayscale
+    original_w = model.state_dict()['conv1.weight']
+    model.conv1.weight.data = 0.299 * original_w[:, 0:1, :, :] + 0.587 * original_w[:, 1:2, :, :] + 0.114 * original_w[:, 2:3, :, :]
     model.fc = nn.Linear(model.fc.in_features, 1)  # Binary classification
     model = model.to(device)
 
@@ -102,7 +109,13 @@ def main():
     for epoch in range(1, epochs + 1):
         loss = train(model, train_loader, optimizer, criterion)
         acc = evaluate(model, val_loader)
-        print(f"Epoch {epoch}/{epochs} | Loss: {loss:.4f} | Accuracy: {acc:.2f}%")
+        verbosely_write(file, f"Epoch {epoch}/{epochs} | Loss: {loss:.4f} | Accuracy: {acc:.2f}%")
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    now = datetime.datetime.now()
+    log_path = './log2'
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+    log_file = open(f'{log_path}/{now.strftime("%y%m%d-%H%M%S")}.log', 'w', encoding='utf-8')
+    main(log_file)
+    log_file.close()
