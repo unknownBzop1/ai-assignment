@@ -1,0 +1,6 @@
+Batch size: 64, Epochs: 20, Learning Rate: 0.0005
+Epoch 1/20 | Loss: 0.6018 | Accuracy: 67.88%
+Epoch 2/20 | Loss: 0.4365 | Accuracy: 76.08%
+Epoch 3/20 | Loss: 0.3296 | Accuracy: 73.92%
+Epoch 4/20 | Loss: 0.2276 | Accuracy: 69.59%
+Epoch 5/20 | Loss: 0.1576 | Accuracy: 73.80%
